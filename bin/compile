@@ -20,8 +20,22 @@ CACHE_DIR=${2:-}
 # ENV_DIR=${3:-}
 BP_DIR=$(cd "$(dirname "${0:-}")"; cd ..; pwd)
 
-BUN_VERSION="$(cat "$BUILD_DIR/.bun-version" 2>/dev/null || echo "latest")"
+# Version lue dans .bun-version : on retire espaces/sauts de ligne et un éventuel
+# "v" en préfixe (v3.14 → 3.14) pour fiabiliser la comparaison de cache et l'URL
+# d'install. Fichier absent ou vide → "latest".
+BUN_VERSION="$(tr -d '[:space:]' 2>/dev/null < "$BUILD_DIR/.bun-version" || echo "latest")"
+BUN_VERSION="${BUN_VERSION#v}"
+[ -z "$BUN_VERSION" ] && BUN_VERSION="latest"
 export BUN_INSTALL="$BUILD_DIR/.bun"
+
+# Installe bun via le script officiel (latest ou version épinglée).
+install_bun() {
+  if [ "$BUN_VERSION" = "latest" ]; then
+    curl -fsSL https://bun.sh/install | bash
+  else
+    curl -fsSL https://bun.sh/install | bash -s "bun-v${BUN_VERSION}"
+  fi
+}
 
 #
 # 1. Installer bun (réutilise le cache si la version correspond)
@@ -32,11 +46,19 @@ if [ -x "$CACHE_DIR/.bun/bin/bun" ] && [ "$("$CACHE_DIR/.bun/bin/bun" --version 
   mkdir -p "$BUN_INSTALL"
   cp -a "$CACHE_DIR/.bun/." "$BUN_INSTALL/"
 else
-  if [ "$BUN_VERSION" = "latest" ]; then
-    curl -fsSL https://bun.sh/install | bash
-  else
-    curl -fsSL https://bun.sh/install | bash -s "bun-v${BUN_VERSION}"
-  fi
+  # Retry réseau : le download du binaire bun se fait DANS le script piped, donc
+  # on relance tout le pipeline (pas juste le fetch curl) en cas de hoquet.
+  attempt=1
+  max_attempts=3
+  until install_bun; do
+    if [ "$attempt" -ge "$max_attempts" ]; then
+      info "bun install failed after ${max_attempts} attempts"
+      exit 1
+    fi
+    info "bun install failed (attempt ${attempt}/${max_attempts}), retrying in 5s..."
+    attempt=$((attempt + 1))
+    sleep 5
+  done
   mkdir -p "$CACHE_DIR/.bun"
   cp -a "$BUN_INSTALL/." "$CACHE_DIR/.bun/"
 fi

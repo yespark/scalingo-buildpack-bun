@@ -2,10 +2,7 @@
 
 Buildpack Scalingo qui installe **bun** au build, en remplacement du `nodejs-buildpack`,
 pour une app dont toute la chaîne JS est bun (package manager + bundler). **bun-only**
-(pas de node). Inspiré du buildpack bun de
-[`proconnect-gouv/hyyypertool`](https://github.com/proconnect-gouv/hyyypertool/tree/scalingo/buildpack).
-
-Utilisé par `yespark/yespark-rails`.
+(pas de node).
 
 ## Ce qu'il fait (`bin/compile`)
 
