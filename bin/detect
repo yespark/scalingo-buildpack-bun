@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Buildpack actif dès qu'il y a un package.json (toolchain JS = bun).
+set -o errexit
+set -o pipefail
+
+if [ -f "${1:-}/package.json" ]; then
+  echo "bun"
+  exit 0
+fi
+
+echo "no package.json found" >&2
+exit 1

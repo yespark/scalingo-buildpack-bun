@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+#
+# Installe bun puis `bun install`, et — point crucial — exporte bun sur le PATH
+# pour les buildpacks SUIVANTS (le ruby-buildpack lance `assets:precompile` →
+# jsbundling `bun run build`). Calqué sur le buildpack bun de proconnect-gouv/
+# hyyypertool, mais bun-only (pas de node) et avec le fichier `export`.
+#
+set -o errexit
+set -o pipefail
+[ -n "${BUILDPACK_DEBUG:-}" ] && set -x
+
+# Évite une fuite de GIT_DIR depuis une étape de build précédente.
+unset GIT_DIR
+
+header() { echo "" ; echo "-----> $*" ; }
+info()   { echo "       $*" ; }
+
+BUILD_DIR=${1:-}
+CACHE_DIR=${2:-}
+# ENV_DIR=${3:-}
+BP_DIR=$(cd "$(dirname "${0:-}")"; cd ..; pwd)
+
+BUN_VERSION="$(cat "$BUILD_DIR/.bun-version" 2>/dev/null || echo "latest")"
+export BUN_INSTALL="$BUILD_DIR/.bun"
+
+#
+# 1. Installer bun (réutilise le cache si la version correspond)
+#
+header "Installing bun ${BUN_VERSION}"
+if [ -x "$CACHE_DIR/.bun/bin/bun" ] && [ "$("$CACHE_DIR/.bun/bin/bun" --version 2>/dev/null)" = "$BUN_VERSION" ]; then
+  info "Using cached bun ${BUN_VERSION}"
+  mkdir -p "$BUN_INSTALL"
+  cp -a "$CACHE_DIR/.bun/." "$BUN_INSTALL/"
+else
+  if [ "$BUN_VERSION" = "latest" ]; then
+    curl -fsSL https://bun.sh/install | bash
+  else
+    curl -fsSL https://bun.sh/install | bash -s "bun-v${BUN_VERSION}"
+  fi
+  mkdir -p "$CACHE_DIR/.bun"
+  cp -a "$BUN_INSTALL/." "$CACHE_DIR/.bun/"
+fi
+export PATH="$BUN_INSTALL/bin:$PATH"
+info "bun $(bun --version)"
+
+#
+# 2. Installer les dépendances JS
+#
+header "Installing JS dependencies (bun install --frozen-lockfile)"
+cd "$BUILD_DIR"
+bun install --frozen-lockfile
+
+#
+# 3. Exporter bun pour les buildpacks SUIVANTS (build-time).
+#    Le ruby-buildpack source ce fichier avant de lancer assets:precompile.
+#
+header "Exporting bun on PATH for subsequent buildpacks"
+{
+  echo "export BUN_INSTALL=\"$BUILD_DIR/.bun\""
+  echo "export PATH=\"$BUILD_DIR/.bun/bin:\$PATH\""
+} > "$BP_DIR/export"
+
+#
+# 4. PATH runtime (.profile.d sourcé au boot du dyno). Inutile à Rails en soi,
+#    mais garde bun disponible dans la console/les process si besoin.
+#
+mkdir -p "$BUILD_DIR/.profile.d"
+{
+  echo "export BUN_INSTALL=\"\$HOME/.bun\""
+  echo "export PATH=\"\$HOME/.bun/bin:\$PATH\""
+} > "$BUILD_DIR/.profile.d/bun.sh"
+
+header "bun buildpack done"

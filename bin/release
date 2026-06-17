@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Pas de process par défaut : le Procfile gère web/worker/etc.
+set -o errexit
+cat <<'YAML'
+--- {}
+YAML
