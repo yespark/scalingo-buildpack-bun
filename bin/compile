@@ -66,6 +66,16 @@ export PATH="$BUN_INSTALL/bin:$PATH"
 info "bun $(bun --version)"
 
 #
+# 1b. Expose un `node` (→ bun) sur le PATH. Le ruby-buildpack teste `command -v node`
+#     (node_js_preinstalled?) : s'il en trouve un, il SKIP son install de Node par
+#     défaut (24.13.0, codée en dur) et le warning « not pinned » associé. Ce `node`
+#     n'est jamais exécuté (jsbundling lance `bun run build`, dartsass son binaire).
+#     Créé hors du bloc cache → recréé à chaque deploy, y compris sur cache restore.
+#
+ln -sf bun "$BUN_INSTALL/bin/node"
+info "node -> bun (skips ruby-buildpack default Node install + warning)"
+
+#
 # 2. Installer les dépendances JS
 #
 header "Installing JS dependencies (bun install --frozen-lockfile)"
