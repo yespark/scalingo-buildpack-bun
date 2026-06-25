@@ -80,7 +80,21 @@ info "node -> bun (skips ruby-buildpack default Node install + warning)"
 #
 header "Installing JS dependencies (bun install --frozen-lockfile)"
 cd "$BUILD_DIR"
-bun install --frozen-lockfile
+# Retry : `bun install` échoue par intermittence sur l'extraction d'un tarball
+# (flake réseau/extraction, ex. "Fail extracting tarball"). On purge le cache de
+# modules entre les essais pour repartir sans le tarball corrompu.
+attempt=1
+max_attempts=3
+until bun install --frozen-lockfile; do
+  if [ "$attempt" -ge "$max_attempts" ]; then
+    info "bun install --frozen-lockfile failed after ${max_attempts} attempts"
+    exit 1
+  fi
+  info "bun install --frozen-lockfile failed (attempt ${attempt}/${max_attempts}), clearing cache and retrying in 5s..."
+  bun pm cache rm || true
+  attempt=$((attempt + 1))
+  sleep 5
+done
 
 #
 # 3. Exporter bun pour les buildpacks SUIVANTS (build-time).
